@@ -11,3 +11,6 @@ tracing-subscriber = { workspace = true }
 barbar-common = { workspace = true }
 anyhow = { workspace = true }
 mio = { workspace = true }
+fontdue = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }

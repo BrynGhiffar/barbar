@@ -43,7 +43,7 @@ impl Ioctl {
         self.layer_evq.dispatch_pending(&mut self.layer_io)?;
 
         if let Some(guard) = self.layer_evq.prepare_read() {
-            tracing::info!("Polling...");
+            tracing::debug!("Polling...");
             loop {
                 match self.poll.poll(&mut self.events, None) {
                     Ok(()) => break,
@@ -54,7 +54,7 @@ impl Ioctl {
                     Err(e) => return Err(e.into())
                 }
             }
-            tracing::info!("Received some events...");
+            tracing::debug!("Received some events...");
 
             if self.events.iter().any(|e| e.token() == LAYER_TOKEN) {
                 match guard.read() {
@@ -62,7 +62,7 @@ impl Ioctl {
                         self.layer_evq.dispatch_pending(&mut self.layer_io)?;
                     }
                     Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        tracing::info!("Spurious wakeup on wayland socket");
+                        tracing::debug!("Spurious wakeup on wayland socket");
                     }
                     Err(e) => return Err(e.into()),
                 }
