@@ -13,4 +13,4 @@ Latest Issues:
     - Memory Usage
     - Show Running Apps (Show App Icon & Names)
     - Show workspaces (Want to create a fancy way to show this)
-
+    - Need to integrate automatic theme color generation based on wallpaper.
