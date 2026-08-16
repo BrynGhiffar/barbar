@@ -12,7 +12,7 @@ pub struct Barbar {
 impl Barbar {
     pub fn new() -> anyhow::Result<Self> {
         let io = Ioctl::new()?;
-        let bar_height  = 30;
+        let bar_height  = 20;
 
         // let font = include_bytes!("/usr/share/fonts/TTF/FiraCodeNerdFontMono-SemiBold.ttf") as &[u8];
         let font = include_bytes!("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-SemiBold.ttf") as &[u8];
@@ -68,13 +68,8 @@ impl Barbar {
                 }
             };
 
-        let mut surf = BarSurface {
-            canvas,
-            width: oi.width as usize,
-            height: self.bar_height as usize,
-            font: self.font.clone()
-        };
-        surf.draw();
+        let mut surf = BarSurface::from_raw(canvas, oi.width as usize, self.bar_height as usize);
+        surf.draw(&self.font);
 
         vec![IoRequest::Render(IoRenderRequest {
             slot,

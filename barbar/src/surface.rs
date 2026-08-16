@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use fontdue::{Font, Metrics, layout::{CoordinateSystem, GlyphPosition, Layout, TextStyle}};
+use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 
 #[derive(Default)]
 pub struct Color {
@@ -19,6 +19,16 @@ impl Color {
         color.b = 0;
         color.g = 0;
         color.r = 0;
+        color.a = 255;
+
+        color
+    }
+
+    pub fn white() -> Self {
+        let mut color = Color::new();
+        color.b = 255;
+        color.g = 255;
+        color.r = 255;
         color.a = 255;
 
         color
@@ -44,97 +54,168 @@ impl Color {
     }
 }
 
+const BPP: usize = 4;
+
+pub struct SurfaceView<'a> {
+    canvas: &'a mut [u8],
+    width: usize,
+    height: usize,
+    stride: usize
+}
+
+impl<'a> SurfaceView<'a> {
+    pub fn from_raw(canvas: &'a mut [u8], width: usize, height: usize) -> Self {
+        SurfaceView { canvas, width, height, stride: width }
+    }
+
+    #[inline]
+    pub fn sub_view(
+        &'a mut self,
+        x: usize,
+        y: usize,
+        view_width: usize,
+        view_height: usize
+    ) -> Option<SurfaceView<'a>> {
+        if x + view_width > self.width || y + view_height > self.height {
+            return None;
+        }
+
+        let start_byte = (y * self.stride + x) * BPP;
+        let required_bytes = if view_height == 0 { 0 } else {
+            ((view_height - 1) * self.stride + view_width) * BPP
+        };
+
+        Some(SurfaceView {
+            canvas: &mut self.canvas[start_byte..start_byte + required_bytes],
+            width: view_width,
+            height: view_height,
+            stride: self.stride
+        })
+    }
+
+    #[inline]
+    pub fn sub_view_margin(
+        &'a mut self,
+        margin_y: usize,
+        margin_x: usize
+    ) -> Option<SurfaceView<'a>> {
+        self.sub_view(margin_x, margin_y, self.width - margin_x, self.height - margin_y)
+    }
+
+    #[inline]
+    pub fn sub_view_center_y(
+        &'a mut self,
+        view_height: usize,
+    ) -> Option<SurfaceView<'a>> {
+        self.sub_view(0, self.height / 2 - view_height / 2, self.width, view_height)
+    }
+
+    pub fn draw_glyph(
+        &mut self,
+        x: isize,            // Logical X on canvas (can be negative due to glyph bearing)
+        y: isize,            // Logical Y on canvas (can be negative)
+        metrics: &fontdue::Metrics,   // fontdue::Metrics
+        bitmap: &[u8],       // fontdue rasterized coverage buffer
+        color: [u8; 4],      // Text color in BGRA format: [B, G, R, A]
+    ) {
+        if metrics.width == 0 || metrics.height == 0 || color[3] == 0 {
+            return;
+        }
+
+        // 1. Calculate clipping bounds to handle partially visible glyphs safely
+        let start_x = x.max(0) as usize;
+        let start_y = y.max(0) as usize;
+        let end_x = (x + metrics.width as isize).min(self.width as isize).max(0) as usize;
+        let end_y = (y + metrics.height as isize).min(self.height as isize).max(0) as usize;
+
+        if start_x >= end_x || start_y >= end_y {
+            return; // Glyph is completely off-screen
+        }
+
+        // 2. Render clipped region
+        for cy in start_y..end_y {
+            let gy = (cy as isize - y) as usize;
+            
+            // CRITICAL: Use self.stride instead of self.width to respect sub-views!
+            let canvas_row_start = cy * self.stride * 4;
+            let bitmap_row_start = gy * metrics.width;
+
+            for cx in start_x..end_x {
+                let gx = (cx as isize - x) as usize;
+                let coverage = bitmap[bitmap_row_start + gx];
+
+                if coverage == 0 {
+                    continue; // Skip transparent background pixels
+                }
+
+                // Modulate text color alpha with fontdue coverage intensity
+                let alpha = (color[3] as u16 * coverage as u16) / 255;
+                if alpha == 0 {
+                    continue;
+                }
+
+                let canvas_idx = canvas_row_start + (cx * 4);
+                let pixel = &mut self.canvas[canvas_idx..canvas_idx + 4];
+
+                if alpha == 255 {
+                    // Fast path for fully opaque pixel interior
+                    pixel[0] = color[0]; // B
+                    pixel[1] = color[1]; // G
+                    pixel[2] = color[2]; // R
+                    pixel[3] = 255;
+                } else {
+                    // Alpha blend anti-aliased font edges over existing background
+                    let inv_alpha = 255 - alpha;
+                    pixel[0] = ((color[0] as u16 * alpha + pixel[0] as u16 * inv_alpha) / 255) as u8; // B
+                    pixel[1] = ((color[1] as u16 * alpha + pixel[1] as u16 * inv_alpha) / 255) as u8; // G
+                    pixel[2] = ((color[2] as u16 * alpha + pixel[2] as u16 * inv_alpha) / 255) as u8; // R
+                    pixel[3] = 255; // Keep target fully opaque
+                }
+            }
+        }
+    }
+
+    pub fn text(&mut self, x: usize, y: usize, color: Color, font: &fontdue::Font , text: &str, size: f32) {
+        // 1. Configure the layout engine
+        let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
+        layout.append(&[font], &TextStyle::new(text, size, 0));
+
+        // 2. Iterate through layout-calculated glyph positions
+        for pos in layout.glyphs() {
+            // pos.x and pos.y give the top-left offset of the glyph bitmap.
+            // Round to nearest integer pixel coordinate.
+            let glyph_x = (x as f32 + pos.x).round() as isize;
+            let glyph_y = (y as f32 + pos.y).round() as isize;
+
+            // 3. Rasterize using the exact key stored in GlyphPosition.
+            // This properly accounts for font sizing and subpixel positioning.
+            let (metrics, bitmap) = font.rasterize_config(pos.key);
+
+            // 4. Render into our sub-view safe canvas
+            self.draw_glyph(glyph_x, glyph_y, &metrics, &bitmap, color.as_buff());
+        }
+    }
+}
+
+
+
 pub struct BarSurface<'a> {
-    pub canvas: &'a mut [u8],
-    pub font: Font,
-    pub width: usize,
-    pub height: usize
+    pub root_view: SurfaceView<'a>,
 }
 
 impl<'a> BarSurface<'a> {
-    pub fn background(&mut self, color: Color) {
-        self.canvas.chunks_exact_mut(4)
-            .for_each(|buff| buff.copy_from_slice(&color.as_buff()));
+    pub fn from_raw(canvas: &'a mut [u8], width: usize, height: usize) -> Self {
+        let root_view = SurfaceView::from_raw(canvas, width, height);
+
+        Self { root_view }
     }
 
-    pub fn draw_char(&mut self, ch: char) {
-        let (met, bitmap) = self.font.rasterize(ch, 15.0);
-        for gy in 0..met.height {
-            for gx in 0..met.width {
-                let bitmap_idx = gy * met.width + gx;
-                let gx = gx + 30;
-                let gy = gy + 10;
-                let canvas_idx = (gy * self.width + gx) * 4;
-
-                let buff = &mut self.canvas[canvas_idx..(canvas_idx + 4)];
-                if bitmap[bitmap_idx] != 0 {
-                    buff[0] = bitmap[bitmap_idx];
-                    buff[1] = bitmap[bitmap_idx];
-                    buff[2] = bitmap[bitmap_idx];
-                    buff[3] = 255;
-                }
-            }
-        }
-    }
-
-    fn draw_single_char(&mut self, x1: usize, y1: usize, gpos: &GlyphPosition, met: &Metrics, bm: &[u8]) {
-        for gy in 0..met.height {
-            for gx in 0..met.width {
-                let bitmap_idx = gy * met.width + gx;
-                let gx = x1 + gx + (gpos.x as usize);
-                let gy = y1 + gy + (gpos.y as usize);
-                let canvas_idx = (gy * self.width + gx) * 4;
-
-                let buff = &mut self.canvas[canvas_idx..(canvas_idx + 4)];
-                if bm[bitmap_idx] != 0 {
-                    buff[0] = bm[bitmap_idx];
-                    buff[1] = bm[bitmap_idx];
-                    buff[2] = bm[bitmap_idx];
-                    buff[3] = 255;
-                }
-            }
-        }
-    }
-
-    pub fn draw_rect(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: Color) {
-        for x in x1..(x2+1) {
-            for y in [y1, y2] {
-                let canvas_idx = (y * self.width + x) * 4;
-                let buff = &mut self.canvas[canvas_idx..(canvas_idx + 4)];
-                buff.copy_from_slice(&color.as_buff());
-            }
-        }
-
-        for x in [x1, x2] {
-            for y in y1..(y2+1) {
-                let canvas_idx = (y * self.width + x) * 4;
-                let buff = &mut self.canvas[canvas_idx..(canvas_idx + 4)];
-                buff.copy_from_slice(&color.as_buff());
-            }
-        }
-    }
-
-    pub fn draw_text(&mut self, x1: usize, y1: usize, text: &str) {
-        let size = 11.0;
-        let font = [&self.font];
-        let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
-        layout.append(&font, &TextStyle::new(text, size, 0));
-        let glyphs: Vec<_> = text.chars().map(|c| self.font.rasterize(c, size)).collect();
-        for (pos, (metrics, bm)) in layout.glyphs().iter().zip(glyphs.iter()) {
-            self.draw_single_char(x1, y1, pos, metrics, bm);
-        }
-    }
-
-    pub fn draw(&mut self) {
+    pub fn draw(&'a mut self, font: &fontdue::Font) {
         let now: DateTime<Local> = Local::now();
         let formatted_dt = now.format("%H.%M | %A, %e %B %Y").to_string();
-        // self.background(Color::black().half_a());
-        self.draw_text(10, self.height / 2 - 6, &formatted_dt);
-        // self.draw_rect(0, 0, 15, 15, Color::red());
+        if let Some(mut comp_view) = self.root_view.sub_view_margin(0, 15) 
+            && let Some(mut comp_view) = comp_view.sub_view_center_y(14) {
+            comp_view.text(0, 0, Color::white(), font, &formatted_dt, 11.0);
+        }
     }
 }
-
-// pub struct TextSurface {
-//     glyphs: Vec<(Metrics, Vec<u8>)>,
-//     layout: Layout
-// }
