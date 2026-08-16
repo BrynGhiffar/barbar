@@ -15,3 +15,4 @@ Latest Issues:
     - Show workspaces (Want to create a fancy way to show this)
     - Need to integrate automatic theme color generation based on wallpaper.
     - Internet connectivity widget
+    - Keyboard interactivity?
