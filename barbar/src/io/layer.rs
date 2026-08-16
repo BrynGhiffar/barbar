@@ -26,7 +26,7 @@ impl Output {
     }
 }
 
-pub struct WpdmLayerIO {
+pub struct LayerIO {
     pub conn: Connection,
     pub registry_state: RegistryState,
     pub seat_state: SeatState,
@@ -36,10 +36,11 @@ pub struct WpdmLayerIO {
     pub shm: Shm,
     pub qh: QueueHandle<Self>,
     pub outputs: Vec<Output>,
-    pub io_queue: VecDeque<IoEvent>
+    pub io_queue: VecDeque<IoEvent>,
+    pub bar_height: i32
 }
 
-impl WpdmLayerIO {
+impl LayerIO {
     pub fn new() -> anyhow::Result<(Self, EventQueue<Self>)> {
         let conn = Connection::connect_to_env()?;
         let (globals, event_queue) = registry_queue_init::<Self>(&conn)?;
@@ -51,6 +52,8 @@ impl WpdmLayerIO {
 
         let layer_shell = LayerShell::bind(&globals, &qh)?;
 
+        let bar_height = 30;
+
         Ok((Self {
             conn,
             registry_state: RegistryState::new(&globals),
@@ -61,7 +64,8 @@ impl WpdmLayerIO {
             qh,
             shm,
             outputs: vec![],
-            io_queue: VecDeque::new()
+            io_queue: VecDeque::new(),
+            bar_height
         }, event_queue))
     }
 
@@ -70,13 +74,13 @@ impl WpdmLayerIO {
         let mut slot = SlotPool::new(1, &self.shm)?;
 
         let (buffer, _) = slot
-            .create_buffer(oi.width, oi.height, oi.width * 4, wl_shm::Format::Argb8888)?;
+            .create_buffer(oi.width, self.bar_height, oi.width * 4, wl_shm::Format::Argb8888)?;
 
         buffer.attach_to(output.layer.wl_surface())?;
         output
             .layer
             .wl_surface()
-            .damage_buffer(0, 0, oi.width, oi.height);
+            .damage_buffer(0, 0, oi.width, self.bar_height);
 
         output.layer.wl_surface().frame(&self.qh, output.layer.wl_surface().clone());
         output.layer.commit();
@@ -95,7 +99,7 @@ impl WpdmLayerIO {
             return Ok(())
         }
         buffer.attach_to(output.layer.wl_surface())?;
-        output.layer.wl_surface().damage_buffer(0, 0, output.width, output.height);
+        output.layer.wl_surface().damage_buffer(0, 0, output.width, self.bar_height);
         if render_next {
             output.layer.wl_surface().frame(&self.qh, output.layer.wl_surface().clone());
         }
@@ -143,7 +147,7 @@ impl WpdmLayerIO {
     }
 }
 
-impl CompositorHandler for WpdmLayerIO {
+impl CompositorHandler for LayerIO {
     fn frame(
         &mut self,
         _conn: &Connection,
@@ -208,7 +212,7 @@ impl CompositorHandler for WpdmLayerIO {
     }
 }
 
-impl OutputHandler for WpdmLayerIO {
+impl OutputHandler for LayerIO {
     fn output_state(&mut self) -> &mut OutputState {
         &mut self.output_state
     }
@@ -229,13 +233,15 @@ impl OutputHandler for WpdmLayerIO {
         let layer = self.layer_shell.create_layer_surface(
             qh,
             surface,
-            Layer::Background,
+            Layer::Bottom,
             Some("barbar"),
             Some(&output),
         );
-        layer.set_anchor(Anchor::BOTTOM);
+        layer.set_margin(0, 0, self.bar_height, 0);
+        layer.set_exclusive_zone(self.bar_height + 5);
+        layer.set_anchor(Anchor::TOP);
         layer.set_keyboard_interactivity(KeyboardInteractivity::None);
-        layer.set_size(output_info.width as u32, output_info.height as u32);
+        layer.set_size(output_info.width as u32, self.bar_height as u32);
         layer.commit();
 
         let output = Output {
@@ -277,7 +283,7 @@ impl OutputHandler for WpdmLayerIO {
     }
 }
 
-impl LayerShellHandler for WpdmLayerIO {
+impl LayerShellHandler for LayerIO {
     fn closed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _layer: &LayerSurface) {}
 
     fn configure(
@@ -302,7 +308,7 @@ impl LayerShellHandler for WpdmLayerIO {
     }
 }
 
-impl SeatHandler for WpdmLayerIO {
+impl SeatHandler for LayerIO {
     fn seat_state(&mut self) -> &mut SeatState {
         &mut self.seat_state
     }
@@ -330,7 +336,7 @@ impl SeatHandler for WpdmLayerIO {
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlSeat) {}
 }
 
-impl KeyboardHandler for WpdmLayerIO {
+impl KeyboardHandler for LayerIO {
     fn enter(
         &mut self,
         _: &Connection,
@@ -396,7 +402,7 @@ impl KeyboardHandler for WpdmLayerIO {
     }
 }
 
-impl PointerHandler for WpdmLayerIO {
+impl PointerHandler for LayerIO {
     fn pointer_frame(
         &mut self,
         _conn: &Connection,
@@ -407,24 +413,24 @@ impl PointerHandler for WpdmLayerIO {
     }
 }
 
-impl ShmHandler for WpdmLayerIO {
+impl ShmHandler for LayerIO {
     fn shm_state(&mut self) -> &mut Shm {
         &mut self.shm
     }
 }
 
-impl ProvidesRegistryState for WpdmLayerIO {
+impl ProvidesRegistryState for LayerIO {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
     registry_handlers![OutputState, SeatState];
 }
 
-delegate_compositor!(WpdmLayerIO);
-delegate_output!(WpdmLayerIO);
-delegate_seat!(WpdmLayerIO);
-delegate_keyboard!(WpdmLayerIO);
-delegate_pointer!(WpdmLayerIO);
-delegate_shm!(WpdmLayerIO);
-delegate_layer!(WpdmLayerIO);
-delegate_registry!(WpdmLayerIO);
+delegate_compositor!(LayerIO);
+delegate_output!(LayerIO);
+delegate_seat!(LayerIO);
+delegate_keyboard!(LayerIO);
+delegate_pointer!(LayerIO);
+delegate_shm!(LayerIO);
+delegate_layer!(LayerIO);
+delegate_registry!(LayerIO);

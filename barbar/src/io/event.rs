@@ -31,8 +31,7 @@ pub struct IoRenderEvent {
 #[derive(Debug)]
 pub enum IoRequest {
     InitRender(OutputInfo),
-    Render(IoRenderRequest),
-    CliMonitorQuery
+    Render(IoRenderRequest)
 }
 
 #[derive(Debug)]
