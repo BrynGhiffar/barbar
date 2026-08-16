@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+smithay-client-toolkit = { workspace = true }
+wayland-client = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+barbar-common = { workspace = true }
+anyhow = { workspace = true }
+mio = { workspace = true }
