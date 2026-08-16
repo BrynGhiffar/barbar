@@ -8,7 +8,7 @@ use smithay_client_toolkit::{
 use wayland_client::{
     Connection, EventQueue, QueueHandle, globals::registry_queue_init, protocol::{wl_keyboard::WlKeyboard, wl_output::{Transform, WlOutput}, wl_pointer::WlPointer, wl_seat::WlSeat, wl_shm, wl_surface::WlSurface}
 };
-use crate::io::event::{OutputInfo, IoEvent, IoOutputEvent, IoRenderEvent, IoRenderRequest};
+use crate::io::event::{IoEvent, IoInitRender, IoOutputEvent, IoRenderEvent, IoRenderRequest, OutputInfo};
 
 
 #[derive(Debug)]
@@ -37,7 +37,6 @@ pub struct LayerIO {
     pub qh: QueueHandle<Self>,
     pub outputs: Vec<Output>,
     pub io_queue: VecDeque<IoEvent>,
-    pub bar_height: i32
 }
 
 impl LayerIO {
@@ -52,8 +51,6 @@ impl LayerIO {
 
         let layer_shell = LayerShell::bind(&globals, &qh)?;
 
-        let bar_height = 30;
-
         Ok((Self {
             conn,
             registry_state: RegistryState::new(&globals),
@@ -64,23 +61,23 @@ impl LayerIO {
             qh,
             shm,
             outputs: vec![],
-            io_queue: VecDeque::new(),
-            bar_height
+            io_queue: VecDeque::new()
         }, event_queue))
     }
 
-    pub fn init_render(&self, oi: OutputInfo) -> anyhow::Result<()> {
+    pub fn init_render(&self, init: IoInitRender) -> anyhow::Result<()> {
+        let IoInitRender { oi, bar_height } = init;
         let output = self.get_output_by_name(&oi.name).context("Output not found")?;
         let mut slot = SlotPool::new(1, &self.shm)?;
 
         let (buffer, _) = slot
-            .create_buffer(oi.width, self.bar_height, oi.width * 4, wl_shm::Format::Argb8888)?;
+            .create_buffer(oi.width, bar_height, oi.width * 4, wl_shm::Format::Argb8888)?;
 
         buffer.attach_to(output.layer.wl_surface())?;
         output
             .layer
             .wl_surface()
-            .damage_buffer(0, 0, oi.width, self.bar_height);
+            .damage_buffer(0, 0, oi.width, bar_height);
 
         output.layer.wl_surface().frame(&self.qh, output.layer.wl_surface().clone());
         output.layer.commit();
@@ -91,6 +88,7 @@ impl LayerIO {
         slot: _slot,
         buffer,
         oi,
+        bar_height,
         render_next
     }: IoRenderRequest) -> anyhow::Result<()> {
         let output = self.get_output_by_name(&oi.name).context("Output not found")?;
@@ -98,8 +96,14 @@ impl LayerIO {
             tracing::error!("output needs to be configured before rendered");
             return Ok(())
         }
+        output.layer.set_margin(0, 0, bar_height, 0);
+        output.layer.set_exclusive_zone(bar_height + 5);
+        output.layer.set_anchor(Anchor::TOP);
+        output.layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        output.layer.set_size(oi.width as u32, bar_height as u32);
+        output.layer.commit();
         buffer.attach_to(output.layer.wl_surface())?;
-        output.layer.wl_surface().damage_buffer(0, 0, output.width, self.bar_height);
+        output.layer.wl_surface().damage_buffer(0, 0, output.width, bar_height);
         if render_next {
             output.layer.wl_surface().frame(&self.qh, output.layer.wl_surface().clone());
         }
@@ -237,11 +241,9 @@ impl OutputHandler for LayerIO {
             Some("barbar"),
             Some(&output),
         );
-        layer.set_margin(0, 0, self.bar_height, 0);
-        layer.set_exclusive_zone(self.bar_height + 5);
         layer.set_anchor(Anchor::TOP);
         layer.set_keyboard_interactivity(KeyboardInteractivity::None);
-        layer.set_size(output_info.width as u32, self.bar_height as u32);
+        layer.set_size(output_info.width as u32, 1);
         layer.commit();
 
         let output = Output {

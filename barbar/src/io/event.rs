@@ -30,8 +30,14 @@ pub struct IoRenderEvent {
 
 #[derive(Debug)]
 pub enum IoRequest {
-    InitRender(OutputInfo),
+    InitRender(IoInitRender),
     Render(IoRenderRequest)
+}
+
+#[derive(Debug)]
+pub struct IoInitRender {
+    pub oi: OutputInfo,
+    pub bar_height: i32
 }
 
 #[derive(Debug)]
@@ -39,5 +45,6 @@ pub struct IoRenderRequest {
     pub slot: SlotPool,
     pub buffer: Buffer,
     pub oi: OutputInfo,
+    pub bar_height: i32,
     pub render_next: bool
 }
