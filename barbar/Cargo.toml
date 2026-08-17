@@ -15,3 +15,4 @@ fontdue = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }
 rustix = { workspace = true }
+systemstat = { workspace = true }
