@@ -3,9 +3,9 @@
 A Wayland bar, kinda like waybar
 
 Latest Issues:
-- --Crashes on monitor restart, due state being unsychronized
+- ~~Crashes on monitor restart, due state being unsychronized
     (before thread sleep & after thread sleep).
-    Solution: Integrate timerfd then use timer to trigger rerender--
+    Solution: Integrate timerfd then use timer to trigger rerender~~
 - Only renders datetime.
 - Need to integrate:
     - Disk Usage
