@@ -15,9 +15,11 @@ pub struct Barbar {
 pub struct SystemStat {
     sys: systemstat::System,
     cpu_stat: Option<systemstat::DelayedMeasurement<CPULoad>>,
+    last_snapshot: Option<SystemStatSnapshot>
 }
 
 pub struct SystemStatSnapshot {
+    pub cpu_temp: f32,
     pub cpu_user: f32,
     pub cpu_system: f32,
     pub mem_free: u64,
@@ -39,39 +41,54 @@ impl SystemStat {
         SystemStat {
             sys,
             cpu_stat,
+            last_snapshot: None
         }
     }
 
-    fn mem_stat(sys: &systemstat::System) -> (u64, u64) {
+    fn mem_stat(sys: &systemstat::System) -> Option<(u64, u64)> {
         let mem = sys.memory().ok();
         if let Some(mem) = mem {
-            (mem.free.as_u64(), mem.total.as_u64())
+            Some((mem.free.as_u64(), mem.total.as_u64()))
         } else {
-            (0, 0)
+            None
         }
     }
 
-    fn disk_stat(sys: &systemstat::System) -> (u64, u64) {
+    fn disk_stat(sys: &systemstat::System) -> Option<(u64, u64)> {
         let disk = sys.mount_at("/").ok();
         if let Some(disk) = disk {
-            (disk.avail.as_u64(), disk.total.as_u64())
+            Some((disk.avail.as_u64(), disk.total.as_u64()))
         } else {
-            (0, 0)
+            None
         }
     }
 
     pub fn snapshot(&mut self) -> SystemStatSnapshot {
-        let mut cpu_user = 0.0;
-        let mut cpu_system = 0.0;
+        let mut cpu_user = self.last_snapshot.as_ref().map(|l| l.cpu_user).unwrap_or(0.0);
+        let mut cpu_system = self.last_snapshot.as_ref().map(|l| l.cpu_system).unwrap_or(0.0);
         if let Some(cpu_stat) = self.cpu_stat.take() 
             && let Some(cpu_stat) = cpu_stat.done().ok() {
             cpu_user = cpu_stat.user;
             cpu_system = cpu_stat.system;
             self.cpu_stat = self.sys.cpu_load_aggregate().ok();
         }
-        let (mem_free, mem_total) = Self::mem_stat(&self.sys);
-        let (free_disk, total_disk) = Self::disk_stat(&self.sys);
+        let (mem_free, mem_total) = if let Some(mem) = Self::mem_stat(&self.sys) {
+            mem
+        } else {
+            let mem_free = self.last_snapshot.as_ref().map(|l| l.mem_free).unwrap_or(0);
+            let mem_total = self.last_snapshot.as_ref().map(|l| l.mem_total).unwrap_or(0);
+            (mem_free, mem_total)
+        };
+        let (free_disk, total_disk) = if let Some(disk) = Self::disk_stat(&self.sys) {
+            disk
+        } else {
+            let free_disk = self.last_snapshot.as_ref().map(|l| l.free_disk).unwrap_or(0);
+            let total_disk = self.last_snapshot.as_ref().map(|l| l.total_disk).unwrap_or(0);
+            (free_disk, total_disk)
+        };
+        let cpu_temp = self.sys.cpu_temp().ok().unwrap_or(0.0);
         SystemStatSnapshot {
+            cpu_temp,
             cpu_user,
             cpu_system,
             mem_free,

@@ -326,7 +326,7 @@ impl<'a> BarSurface<'a> {
         let now: DateTime<Local> = Local::now();
         let disk = format!("[/] {:.1}GiB/{:.1}GiB {:.0}%", (stat.total_disk - stat.free_disk) as f32 / 10.0_f32.powf(9.0), stat.total_disk as f32 /  10.0_f32.powf(9.0), (stat.total_disk - stat.free_disk) as f32 * 100.0 / stat.total_disk as f32);
         let mem = format!("{:.0}% ", 100.0 - (stat.mem_free as f32 * 100.0) / (stat.mem_total as f32));
-        let cpu = format!("{:.0}% ", stat.cpu_user * 100.0 + stat.cpu_system * 100.0);
+        let cpu = format!("{:.0}% {}C ", stat.cpu_user * 100.0 + stat.cpu_system * 100.0, stat.cpu_temp);
         let datetime = now.format("%H.%M.%S | %A, %e %B %Y").to_string();
         let template = format!("{disk} | {cpu} | {mem} | {datetime}");
         let (width, height) = calculate_width_height(font, &template, text_size);
