@@ -11,7 +11,7 @@ use wayland_client::{
 use crate::io::event::{IoEvent, IoInitRender, IoOutputEvent, IoRenderEvent, IoRenderRequest, OutputInfo};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Output {
     pub name: String,
     pub layer: LayerSurface,
@@ -66,19 +66,20 @@ impl LayerIO {
     }
 
     pub fn init_render(&self, init: IoInitRender) -> anyhow::Result<()> {
-        let IoInitRender { oi, bar_height } = init;
+        let IoInitRender { oi, bar_height, trigger_only } = init;
         let output = self.get_output_by_name(&oi.name).context("Output not found")?;
-        let mut slot = SlotPool::new(1, &self.shm)?;
+        if !trigger_only {
+            let mut slot = SlotPool::new(1, &self.shm)?;
 
-        let (buffer, _) = slot
-            .create_buffer(oi.width, bar_height, oi.width * 4, wl_shm::Format::Argb8888)?;
+            let (buffer, _) = slot
+                .create_buffer(oi.width, bar_height, oi.width * 4, wl_shm::Format::Argb8888)?;
 
-        buffer.attach_to(output.layer.wl_surface())?;
-        output
-            .layer
-            .wl_surface()
-            .damage_buffer(0, 0, oi.width, bar_height);
-
+            buffer.attach_to(output.layer.wl_surface())?;
+            output
+                .layer
+                .wl_surface()
+                .damage_buffer(0, 0, oi.width, bar_height);
+        }
         output.layer.wl_surface().frame(&self.qh, output.layer.wl_surface().clone());
         output.layer.commit();
         Ok(())
@@ -116,6 +117,10 @@ impl LayerIO {
         self.outputs
             .iter()
             .find(|out| out.name == name)
+    }
+
+    pub fn get_all_outputs(&self) -> &[Output] {
+        &self.outputs
     }
 
     fn get_output_by_surface(&self, surface: &WlSurface) -> Option<&Output> {

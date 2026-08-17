@@ -7,6 +7,7 @@ pub enum IoEvent {
     ConfigureOutput(IoOutputEvent),
     NewOutput(IoOutputEvent),
     DestroyOutput(IoOutputEvent),
+    RenderTimer
     // CliRequest(CliRequest)
 }
 
@@ -37,7 +38,8 @@ pub enum IoRequest {
 #[derive(Debug)]
 pub struct IoInitRender {
     pub oi: OutputInfo,
-    pub bar_height: i32
+    pub bar_height: i32,
+    pub trigger_only: bool
 }
 
 #[derive(Debug)]

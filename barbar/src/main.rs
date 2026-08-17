@@ -5,6 +5,7 @@ use crate::barbar::Barbar;
 pub mod io;
 pub mod barbar;
 pub mod surface;
+pub mod ext;
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()

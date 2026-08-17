@@ -212,7 +212,7 @@ impl<'a> BarSurface<'a> {
 
     pub fn draw(&'a mut self, font: &fontdue::Font) {
         let now: DateTime<Local> = Local::now();
-        let formatted_dt = now.format("%H.%M | %A, %e %B %Y").to_string();
+        let formatted_dt = now.format("%H.%M.%S | %A, %e %B %Y").to_string();
         if let Some(mut comp_view) = self.root_view.sub_view_margin(0, 15) 
             && let Some(mut comp_view) = comp_view.sub_view_center_y(14) {
             comp_view.text(0, 0, Color::white(), font, &formatted_dt, 11.0);

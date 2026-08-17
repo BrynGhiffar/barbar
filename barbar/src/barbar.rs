@@ -46,12 +46,12 @@ impl Barbar {
             IoEvent::Render(event) => self.render_logic(event),
             IoEvent::ConfigureOutput(event) => self.configure_logic(event),
             IoEvent::NewOutput(event) => self.new_output_logic(event),
-            IoEvent::DestroyOutput(event) => self.destroy_output_logic(event)
+            IoEvent::DestroyOutput(event) => self.destroy_output_logic(event),
+            IoEvent::RenderTimer => self.render_timer()
         }
     }
 
     pub fn render_logic(&mut self, event: IoRenderEvent) -> Vec<IoRequest> {
-        std::thread::sleep(std::time::Duration::from_millis(1_000));
         let IoRenderEvent { mut slot, oi } = event;
 
         let (buffer, canvas) = match slot
@@ -76,13 +76,24 @@ impl Barbar {
             buffer,
             oi,
             bar_height: self.bar_height,
-            render_next: true,
+            render_next: false,
         })]
+    }
+
+    pub fn render_timer(&self) -> Vec<IoRequest> {
+        let ois = self.io.get_all_oi();
+        ois.into_iter()
+            .map(|oi| IoRequest::InitRender(IoInitRender {
+                oi,
+                bar_height: self.bar_height,
+                trigger_only: true
+            }))
+            .collect()
     }
 
     pub fn configure_logic(&mut self, event: IoOutputEvent) -> Vec<IoRequest> {
         let IoOutputEvent { oi } = event;
-        let init = IoInitRender { oi, bar_height: self.bar_height };
+        let init = IoInitRender { oi, bar_height: self.bar_height, trigger_only: false };
         vec![IoRequest::InitRender(init)]
     }
 

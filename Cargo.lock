@@ -48,6 +48,7 @@ dependencies = [
  "fontdue",
  "mio",
  "rand",
+ "rustix",
  "smithay-client-toolkit",
  "tracing",
  "tracing-subscriber",
