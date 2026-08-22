@@ -360,7 +360,7 @@ impl<'a> BarSurface<'a> {
         self.workspaces.sort_by_key(|s| s.id);
         let template = self.workspaces.iter().map(|s| {
             if let Some(active) = self.activeworkspace.as_ref() && active.id == s.id {
-                return format!("({})", active.name);
+                return format!("[{}]", active.name);
             }
             s.name.to_string()
         })
