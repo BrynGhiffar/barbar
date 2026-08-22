@@ -3,7 +3,7 @@ use std::os::fd::{AsFd, AsRawFd};
 use mio::{Events, Interest, Poll, Token, unix::SourceFd};
 use wayland_client::{EventQueue, backend::WaylandError};
 
-use crate::{ext::timerfd::TimerFd, io::{event::{IoEvent, IoRequest, OutputInfo}, layer::LayerIO}};
+use crate::{ext::timerfd::TimerFd, hypr::{HyprIPC, HyprWorkspaceInfo}, io::{event::{IoEvent, IoRequest, OutputInfo}, layer::LayerIO}};
 
 
 pub struct Ioctl {
@@ -11,11 +11,13 @@ pub struct Ioctl {
     layer_evq: EventQueue<LayerIO>,
     poll: Poll,
     events: Events,
-    render_timer: TimerFd
+    render_timer: TimerFd,
+    hypr: HyprIPC
 }
 
 const LAYER_TOKEN: Token = Token(0);
 const RENDER_TIMER_TOKEN: Token = Token(1);
+const HYPR_TOKEN: Token = Token(2);
 
 impl Ioctl {
     pub fn new() -> anyhow::Result<Self> {
@@ -24,6 +26,9 @@ impl Ioctl {
         let events = Events::with_capacity(32);
         let wl_fd = layer_io.conn.as_fd();
         let wl_fd = wl_fd.as_raw_fd();
+        let hypr = HyprIPC::new()?;
+        let hypr_fd = hypr.as_fd();
+        let hypr_fd = hypr_fd.as_raw_fd();
         layer_evq.roundtrip(&mut layer_io)?;
 
         let mut render_timer = TimerFd::new()?;
@@ -37,7 +42,10 @@ impl Ioctl {
         poll.registry()
             .register(&mut render_timer, RENDER_TIMER_TOKEN, Interest::READABLE)?;
 
-        Ok(Self { layer_io, layer_evq, render_timer, poll, events })
+        poll.registry()
+            .register(&mut SourceFd(&hypr_fd), HYPR_TOKEN, Interest::READABLE)?;
+
+        Ok(Self { layer_io, layer_evq, render_timer, poll, events, hypr })
     }
 
     pub fn pop_layer_io_evt(&mut self, res: &mut Vec<IoEvent>) {
@@ -87,6 +95,17 @@ impl Ioctl {
                     _ => {}
                 }
             }
+
+            if self.events.iter().any(|e| e.token() == HYPR_TOKEN) {
+                match self.hypr.recv() {
+                    Ok(_) => {
+                        res.push(IoEvent::RenderTimer);
+                    },
+                    Err(err) => {
+                        tracing::error!("[HYPR_EVENT]: {}", err);
+                    }
+                }
+            }
         }
         self.pop_layer_io_evt(&mut res);
         Ok(res)
@@ -106,5 +125,9 @@ impl Ioctl {
 
     pub fn get_all_oi(&self) -> Vec<OutputInfo> {
         self.layer_io.get_all_outputs().iter().map(|out| out.to_oi()).collect()
+    }
+
+    pub fn get_workspaces(&self) -> anyhow::Result<Vec<HyprWorkspaceInfo>> {
+        self.hypr.get_workspaces()
     }
 }

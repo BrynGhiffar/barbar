@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 
-use crate::stat::{BarStat, Unit};
+use crate::{hypr::HyprWorkspaceInfo, stat::{BarStat, Unit}};
 
 #[derive(Default, Clone, Copy)]
 pub struct Color {
@@ -96,12 +96,12 @@ impl<'a> SurfaceView<'a> {
 
     #[inline]
     pub fn sub_view(
-        &'a mut self,
+        &mut self,
         x: usize,
         y: usize,
         view_width: usize,
         view_height: usize
-    ) -> Option<SurfaceView<'a>> {
+    ) -> Option<SurfaceView<'_>> {
         if x + view_width > self.width || y + view_height > self.height {
             return None;
         }
@@ -121,26 +121,26 @@ impl<'a> SurfaceView<'a> {
 
     #[inline]
     pub fn sub_view_margin(
-        &'a mut self,
+        &mut self,
         margin_y: usize,
         margin_x: usize
-    ) -> Option<SurfaceView<'a>> {
+    ) -> Option<SurfaceView<'_>> {
         self.sub_view(margin_x, margin_y, self.width - margin_x * 2, self.height - margin_y * 2)
     }
 
     #[inline]
     pub fn sub_view_center_y(
-        &'a mut self,
+        &mut self,
         view_height: usize,
-    ) -> Option<SurfaceView<'a>> {
+    ) -> Option<SurfaceView<'_>> {
         self.sub_view(0, self.height / 2 - view_height / 2 - 1, self.width, view_height)
     }
 
     #[inline]
     pub fn sub_view_align_right(
-        &'a mut self,
+        &mut self,
         view_width: usize,
-    ) -> Option<SurfaceView<'a>> {
+    ) -> Option<SurfaceView<'_>> {
         self.sub_view(self.width - view_width, 0, view_width, self.height)
     }
 
@@ -312,22 +312,29 @@ pub fn calculate_width_height(font: &fontdue::Font, text: &str, size: f32) -> (f
 
 pub struct BarSurface<'a> {
     root_view: SurfaceView<'a>,
+    stat: Option<BarStat>,
+    workspaces: Vec<HyprWorkspaceInfo>
 }
 
 impl<'a> BarSurface<'a> {
-    pub fn from_raw(canvas: &'a mut [u8], width: usize, height: usize) -> Self {
+    pub fn from_raw(
+        canvas: &'a mut [u8],
+        width: usize,
+        height: usize,
+        stat: Option<BarStat>,
+        workspaces: Vec<HyprWorkspaceInfo>
+    ) -> Self {
         let root_view = SurfaceView::from_raw(canvas, width, height);
 
-        Self { root_view }
+        Self { root_view, stat, workspaces }
     }
 
-    pub fn draw(&'a mut self, font: &fontdue::Font, stat: Option<BarStat>) {
-        let text_size = 12.0;
-        let now: DateTime<Local> = Local::now();
-        self.root_view.fill(Color::black().half_a());
-        let Some(stat) = stat else {
+    pub fn draw_right(&mut self, font: &fontdue::Font) {
+        let Some(stat) = self.stat.take() else {
             return;
         };
+        let text_size = 12.0;
+        let now: DateTime<Local> = Local::now();
         let disk = format!("[/] {:.1}GB/{:.1}GB {:.0}%",
             stat.disk_used(Unit::GB),
             stat.disk_total(Unit::GB),
@@ -344,5 +351,28 @@ impl<'a> BarSurface<'a> {
         {
             comp_view.text(0, 0, Color::white(), font, &template, text_size);
         }
+    }
+
+    pub fn draw_workspaces(&mut self, font: &fontdue::Font) {
+        let text_size = 12.0;
+        self.workspaces.sort_by_key(|s| s.id);
+        let template = self.workspaces.iter().map(|s| s.name.as_ref())
+            .fold(String::new(), |mut init, nxt| {
+                init.push(' ');
+                init.push_str(nxt);
+                init 
+            });
+        let (_, height) = calculate_width_height(font, &template, text_size);
+        if let Some(mut comp_view) = self.root_view.sub_view_margin(0, 15) 
+            && let Some(mut comp_view) = comp_view.sub_view_center_y(height as usize)
+        {
+            comp_view.text(0, 0, Color::white(), font, &template, text_size);
+        }
+    }
+
+    pub fn draw(&mut self, font: &fontdue::Font) {
+        self.root_view.fill(Color::black().half_a());
+        self.draw_workspaces(font);
+        self.draw_right(font);
     }
 }

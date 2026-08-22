@@ -7,6 +7,7 @@ pub mod barbar;
 pub mod surface;
 pub mod ext;
 pub mod stat;
+pub mod hypr;
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
