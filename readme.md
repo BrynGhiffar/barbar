@@ -8,11 +8,11 @@ Latest Issues:
     Solution: Integrate timerfd then use timer to trigger rerender~~
 - Only renders datetime.
 - Need to integrate:
-    - Disk Usage
-    - CPU Usage
-    - Memory Usage
+    - ~~Disk Usage~~
+    - ~~CPU Usage~~
+    - ~~Memory Usage~~
     - Show Running Apps (Show App Icon & Names)
-    - Show workspaces (Want to create a fancy way to show this)
+    - ~~Show workspaces~~ (Want to create a fancy way to show this)
     - Need to integrate automatic theme color generation based on wallpaper.
     - Internet connectivity widget
     - Keyboard interactivity?
