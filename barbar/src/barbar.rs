@@ -73,16 +73,15 @@ impl Barbar {
             };
 
 
-        let workspaces = self.io.get_workspaces().unwrap_or_default();
-
-        let workspaces = workspaces.into_iter().filter(|s| s.monitor == oi.name).collect();
-
+        let activeworkspace = self.io.get_active_workspace().ok().filter(|w| w.monitor == oi.name);
+        let workspaces = self.io.get_workspaces().unwrap_or_default().into_iter().filter(|s| s.monitor == oi.name).collect();
         let mut surf = BarSurface::from_raw(
             canvas,
             oi.width as usize,
             self.bar_height as usize,
             self.stat.get_bar_stat().ok(),
-            workspaces
+            workspaces,
+            activeworkspace
         );
         surf.draw(&self.font);
         vec![IoRequest::Render(IoRenderRequest {

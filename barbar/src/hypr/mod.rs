@@ -281,6 +281,16 @@ impl HyprIPC {
         Ok(evts)
     }
 
+    pub fn get_active_workspace(&self) -> anyhow::Result<HyprWorkspaceInfo> {
+        let mut sock = Self::ctl_socket()?;
+        let buf = "j/activeworkspace";
+        let _n = Self::write_stream(&mut sock, buf.as_bytes())?;
+        Self::wait_readable(&mut sock, 1)?;
+        let res = Self::read_stream(&mut sock)?;
+        let workspaces = serde_json::from_str(&res)?;
+        Ok(workspaces)
+    }
+
     pub fn get_workspaces(&self) -> anyhow::Result<Vec<HyprWorkspaceInfo>> {
         let mut sock = Self::ctl_socket()?;
         let buf = "j/workspaces";

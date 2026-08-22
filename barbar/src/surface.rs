@@ -313,7 +313,8 @@ pub fn calculate_width_height(font: &fontdue::Font, text: &str, size: f32) -> (f
 pub struct BarSurface<'a> {
     root_view: SurfaceView<'a>,
     stat: Option<BarStat>,
-    workspaces: Vec<HyprWorkspaceInfo>
+    workspaces: Vec<HyprWorkspaceInfo>,
+    activeworkspace: Option<HyprWorkspaceInfo>
 }
 
 impl<'a> BarSurface<'a> {
@@ -322,11 +323,12 @@ impl<'a> BarSurface<'a> {
         width: usize,
         height: usize,
         stat: Option<BarStat>,
-        workspaces: Vec<HyprWorkspaceInfo>
+        workspaces: Vec<HyprWorkspaceInfo>,
+        activeworkspace: Option<HyprWorkspaceInfo>
     ) -> Self {
         let root_view = SurfaceView::from_raw(canvas, width, height);
 
-        Self { root_view, stat, workspaces }
+        Self { root_view, stat, workspaces, activeworkspace }
     }
 
     pub fn draw_right(&mut self, font: &fontdue::Font) {
@@ -356,10 +358,15 @@ impl<'a> BarSurface<'a> {
     pub fn draw_workspaces(&mut self, font: &fontdue::Font) {
         let text_size = 12.0;
         self.workspaces.sort_by_key(|s| s.id);
-        let template = self.workspaces.iter().map(|s| s.name.as_ref())
+        let template = self.workspaces.iter().map(|s| {
+            if let Some(active) = self.activeworkspace.as_ref() && active.id == s.id {
+                return format!("({})", active.name);
+            }
+            s.name.to_string()
+        })
             .fold(String::new(), |mut init, nxt| {
                 init.push(' ');
-                init.push_str(nxt);
+                init.push_str(&nxt);
                 init 
             });
         let (_, height) = calculate_width_height(font, &template, text_size);

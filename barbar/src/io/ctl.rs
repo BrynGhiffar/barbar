@@ -130,4 +130,8 @@ impl Ioctl {
     pub fn get_workspaces(&self) -> anyhow::Result<Vec<HyprWorkspaceInfo>> {
         self.hypr.get_workspaces()
     }
+
+    pub fn get_active_workspace(&self) -> anyhow::Result<HyprWorkspaceInfo> {
+        self.hypr.get_active_workspace()
+    }
 }
