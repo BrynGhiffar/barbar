@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 
-use crate::barbar::SystemStatSnapshot;
+use crate::stat::{BarStat, Unit};
 
 #[derive(Default, Clone, Copy)]
 pub struct Color {
@@ -321,16 +321,23 @@ impl<'a> BarSurface<'a> {
         Self { root_view }
     }
 
-    pub fn draw(&'a mut self, font: &fontdue::Font, stat: SystemStatSnapshot) {
+    pub fn draw(&'a mut self, font: &fontdue::Font, stat: Option<BarStat>) {
         let text_size = 12.0;
         let now: DateTime<Local> = Local::now();
-        let disk = format!("[/] {:.1}GiB/{:.1}GiB {:.0}%", (stat.total_disk - stat.free_disk) as f32 / 10.0_f32.powf(9.0), stat.total_disk as f32 /  10.0_f32.powf(9.0), (stat.total_disk - stat.free_disk) as f32 * 100.0 / stat.total_disk as f32);
-        let mem = format!("{:.0}% ", 100.0 - (stat.mem_free as f32 * 100.0) / (stat.mem_total as f32));
-        let cpu = format!("{:.0}% {}C ", stat.cpu_user * 100.0 + stat.cpu_system * 100.0, stat.cpu_temp);
+        self.root_view.fill(Color::black().half_a());
+        let Some(stat) = stat else {
+            return;
+        };
+        let disk = format!("[/] {:.1}GB/{:.1}GB {:.0}%",
+            stat.disk_used(Unit::GB),
+            stat.disk_total(Unit::GB),
+            stat.disk_used_pct()
+        );
+        let mem = format!("{:.0}% ", stat.mem_usage_pct());
+        let cpu = format!("{:.0}% {}C ", stat.cpu_usage_pct(), stat.cpu_temp());
         let datetime = now.format("%H.%M.%S | %A, %e %B %Y").to_string();
         let template = format!("{disk} | {cpu} | {mem} | {datetime}");
         let (width, height) = calculate_width_height(font, &template, text_size);
-        self.root_view.fill(Color::black().half_a());
         if let Some(mut comp_view) = self.root_view.sub_view_margin(0, 15) 
             && let Some(mut comp_view) = comp_view.sub_view_center_y(height as usize)
             && let Some(mut comp_view) = comp_view.sub_view_align_right(width as usize)
